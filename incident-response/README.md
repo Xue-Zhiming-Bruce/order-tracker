@@ -60,9 +60,16 @@ the honest description of its limits. Production would add:
   grades actions (read-only first, write behind approval) and never hands a
   model general production credentials. The module's principle applies: the
   model may reason, the system must observe, authorize, verify and remember.
-- **Recovery verification** — this responder records the agent's commit but does
-  not itself confirm the service recovered. `runbooks/verify-recovery.sh` is the
-  missing step: replay the request and check the status.
+- **Recovery verification** — `runbooks/verify-recovery.sh` replays the failing
+  request and fails when it still returns 5xx. It is run by hand here; production
+  would invoke it automatically after the agent finishes and escalate on failure.
 - **Isolation** — the agent should run in a container job with an allowlist and
   scoped credentials, not directly on the host.
+- **De-duplication** — Grafana re-sends a firing alert every `repeat_interval`, so
+  one ongoing incident can start several agent runs on the same problem. In the Q6
+  test two runs overlapped: the first fixed the bug, and the second correctly
+  detected that the incident was already resolved and took no action
+  (`agent-status.json`: `commit_before == commit_after`). The outcome was right, but
+  the work was duplicated. Key an in-flight set by `alertname` + route and refuse to
+  start a second agent for the same incident.
 - **Escalation** — no path to a human when the agent cannot fix the problem.

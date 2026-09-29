@@ -125,20 +125,26 @@ def run_agent(incident_dir, prompt):
     started = datetime.now(timezone.utc).isoformat()
     before = git("rev-parse", "HEAD")
 
+    # The outcome is recorded even if the agent cannot be launched. A responder that
+    # dies silently cannot be audited, and the module's point is that the system must
+    # remember what it did.
+    exit_code = -1
+    error = None
     with open(incident_dir / "agent-response.txt", "w") as out:
         try:
             result = subprocess.run(command, stdout=out, stderr=subprocess.STDOUT,
                                     cwd=str(REPO), stdin=subprocess.DEVNULL)
             exit_code = result.returncode
-        except FileNotFoundError as exc:
-            exit_code = -1
-            out.write(f"agent executable not found: {exc}\n")
+        except Exception as exc:  # noqa: BLE001 - deliberately broad, must be recorded
+            error = f"{type(exc).__name__}: {exc}"
+            out.write(f"agent failed to run: {error}\n")
 
     answer = (incident_dir / "agent-response.txt").read_text().strip()
     (incident_dir / "agent-status.json").write_text(json.dumps({
         "started_at": started,
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "exit_code": exit_code,
+        "error": error,
         "commit_before": before.strip(),
         "commit_after": git("rev-parse", "HEAD").strip(),
         "git_status": git("status", "--porcelain"),
@@ -161,6 +167,10 @@ def handle_alert(alert):
     (incident_dir / "prompt.md").write_text(prompt + "\n")
 
     print(f"[responder] incident {incident_dir.name} created; starting agent", flush=True)
+    # ponytail: no de-duplication. Grafana re-sends a firing alert every
+    # repeat_interval, so an ongoing incident can start several agents on the same
+    # problem (observed in Q6: two runs, the second raced the first). Add an
+    # in-flight set keyed by alertname + route when repeat notifications matter.
     threading.Thread(target=run_agent, args=(incident_dir, prompt), daemon=True).start()
     return incident_dir
 

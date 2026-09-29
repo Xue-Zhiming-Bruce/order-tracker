@@ -1,0 +1,11 @@
+apiVersion: 1
+
+# Routing rules: which alerts go to which contact point. The first policy with no
+# matchers is the default for this organisation.
+policies:
+  - orgId: 1
+    receiver: incident-responder
+    group_by: ["alertname"]
+    group_wait: 5s
+    group_interval: 30s
+    repeat_interval: 1m

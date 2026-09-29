@@ -1,0 +1,32 @@
+{
+  "status": "firing",
+  "labels": {
+    "alertname": "Order Tracker is returning 5xx responses",
+    "environment": "local",
+    "grafana_folder": "Order Tracker",
+    "http_target": "/api/orders/{order_id}",
+    "owner": "platform",
+    "service": "order-tracker"
+  },
+  "annotations": {
+    "dashboard_url": "http://localhost:3001/d/order-tracker",
+    "description": "Route /api/orders/{order_id} is returning 5xx responses. Customers cannot open their order. Owner: platform.",
+    "endpoint": "/api/orders/{order_id}",
+    "summary": "Order Tracker returns server errors (5xx)",
+    "time_window": "rate over the last 1m, alert when above 0 for 30s"
+  },
+  "startsAt": "2026-09-29T11:09:00Z",
+  "endsAt": "0001-01-01T00:00:00Z",
+  "generatorURL": "http://localhost:3000/alerting/grafana/order-tracker-5xx/view?orgId=1",
+  "fingerprint": "b1d4a5d792de4979",
+  "silenceURL": "http://localhost:3000/alerting/silence/new?alertmanager=grafana&matcher=__alert_rule_uid__%3Dorder-tracker-5xx&matcher=environment%3Dlocal&matcher=http_target%3D%2Fapi%2Forders%2F%7Border_id%7D&matcher=owner%3Dplatform&matcher=service%3Dorder-tracker&orgId=1",
+  "dashboardURL": "",
+  "panelURL": "",
+  "values": {
+    "A": 0.072720661758022,
+    "B": 0.072720661758022,
+    "C": 1
+  },
+  "valueString": "[ var='A' labels={http_target=/api/orders/{order_id}} value=0.072720661758022 ], [ var='B' labels={http_target=/api/orders/{order_id}} value=0.072720661758022 ], [ var='C' labels={http_target=/api/orders/{order_id}} value=1 ]",
+  "orgId": 1
+}

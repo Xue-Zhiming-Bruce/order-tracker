@@ -1,0 +1,25 @@
+## Report — Incident `20260929-111035`
+
+**Affected route / status / window**
+- Route: `GET /api/orders/{order_id}` (`http_target` label), failing **HTTP 500**.
+- Alert `startsAt` 2026-09-29T11:09:00Z; notification captured **11:10:35Z**; rule = 1m 5xx rate > 0 for 30s.
+
+**Reproduce (evidence-selected request)**
+```bash
+curl -s -w "\nHTTP %{http_code}\n" http://localhost:8000/api/orders/express-1002
+```
+Result: `HTTP 200` with `"estimated_delivery":"2026-09-02"` — **the failure does not reproduce.**
+
+**Why the alert looks hot but isn't a live incident**
+This is a stale/duplicate notification for the incident already handled at `20260929-110905`:
+- The real 500s came from `order_detail()` computing the express estimate with `placed_at.replace(day=placed_at.day + 2)`. The seeded order `express-1002` was placed `2026-08-31`, so `day=33` raised `ValueError` → 500. That is exactly the order/id the evidence shows being hit, and the route's 5xx metric.
+- That bug was already fixed and committed as **`1f03a27`** ("Fix 500 on express order detail when placed at month end"): `estimated_at = placed_at + timedelta(days=2)`. It is HEAD, the container was rebuilt, and `express-1002` now returns 200.
+- The `evidence.json` `metrics`/`errors` values are a **15-minute `increase()`**, so they still contain the pre-fix 500s; the Loki stream in the same packet shows `express-1002` returning **200** at 11:10:18Z (17s before collection). The alert's 1m rate was still >0 from the earlier outage when the second webhook was delivered.
+
+**Verification**
+- `curl .../api/orders/express-1002` → **200** (also replayed `standard-1001` 200, `standard-1003` 200, `standard-1002` 404 as expected).
+- Alert condition `sum(rate(...{http_status_code=~"5.."}[1m])) or vector(0)` → **0** now (no active 5xx).
+- `uv run --frozen pytest -q` → **4 passed**.
+- No residual overflow pattern: only `now.replace(day=1)` remains (always valid).
+
+**Action taken:** none — no code change, no commit. This alert is a duplicate of an already-resolved incident (`1f03a27`); the smallest correct correction already exists and re-fixing would be a spurious change.

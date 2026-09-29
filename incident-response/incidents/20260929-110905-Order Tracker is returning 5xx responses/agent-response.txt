@@ -1,0 +1,33 @@
+## Incident report
+
+**Affected route / status / timeframe**
+- Route: `GET /api/orders/{order_id}` — failing with **HTTP 500**.
+- Prometheus `errors`/`metrics`: `http_status_code="500", http_target="/api/orders/{order_id}"` at ~7.19 rps; timestamp 1790680145 ≈ **2026-09-29T11:09:05Z**, matching the alert's `startsAt`.
+- Loki corroborates: INFO `order lookup` logs for `order_id=express-1002` (emitted just before the crash), while the route's 500 metric is hot.
+- Traces in the packet only contain `/healthz` spans, so they add no direct signal — but metrics + logs + code pinpoint it.
+
+**Root cause**
+In `app/main.py`, `order_detail()` computed the express estimate as:
+```python
+estimated_at = placed_at.replace(day=placed_at.day + 2)
+```
+The seeded express order `express-1002` is created on the last day of the previous month (2026-08-31). `day + 2 = 33` is not a valid day, so `datetime.replace` raised `ValueError: day is out of range for month` → unhandled → 500. Any express order placed in the last two days of a month hits this; the existing tests never fetched the express order detail, so it was undetected.
+
+**Fix**
+`app/main.py`: `estimated_at = placed_at + timedelta(days=2)` (correctly rolls into the next month). One line. Plus a 4-line regression test for the express detail path.
+
+**Reproduce / verify commands**
+```bash
+# before fix
+curl -s -w "\nHTTP %{http_code}\n" http://localhost:8000/api/orders/express-1002   # -> 500 Internal Server Error
+
+# after fix (rebuilt container)
+docker compose build app && docker compose up -d app
+curl -s -w "\nHTTP %{http_code}\n" http://localhost:8000/api/orders/express-1002
+# -> 200 {"...,"estimated_delivery":"2026-09-02"}   # Aug 31 + 2 days
+
+uv run --frozen pytest -q        # 4 passed
+```
+I also confirmed the new test **fails on the pre-fix code** (`ValueError: day is out of range for month`) and passes after, so it's a real guard, not a weakened test. Committed as `1f03a27`.
+
+Nothing unrelated was touched; the only changed files are `app/main.py` and `tests/test_api.py`.

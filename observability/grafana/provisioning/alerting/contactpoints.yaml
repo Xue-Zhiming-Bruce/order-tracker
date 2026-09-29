@@ -1,0 +1,13 @@
+apiVersion: 1
+
+# Where Grafana sends the alert. The responder runs on the host (so it can reuse
+# the host agent login), so the container reaches it via host.docker.internal.
+contactPoints:
+  - orgId: 1
+    name: incident-responder
+    receivers:
+      - uid: incident-responder
+        type: webhook
+        settings:
+          url: http://host.docker.internal:8001/alerts
+          httpMethod: POST
