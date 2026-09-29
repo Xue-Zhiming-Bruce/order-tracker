@@ -1,0 +1,83 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: order-tracker
+    folder: Order Tracker
+    interval: 30s
+    rules:
+      - uid: order-tracker-5xx
+        title: Order Tracker is returning 5xx responses
+        condition: C
+        # One blip is noise; a sustained 5xx rate is real user impact.
+        for: 30s
+        # If the query somehow returns nothing, treat it as healthy rather than paging.
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: Order Tracker returns server errors (5xx)
+          description: >-
+            Route {{ $labels.http_target }} is returning 5xx responses.
+            Customers cannot open their order. Owner: platform.
+          endpoint: "{{ $labels.http_target }}"
+          time_window: rate over the last 1m, alert when above 0 for 30s
+          dashboard_url: http://localhost:3001/d/order-tracker
+        labels:
+          service: order-tracker
+          environment: local
+          owner: platform
+        data:
+          # A: the 5xx rate. `or vector(0)` makes "no errors" a zero instead of no data.
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: sum by (http_target) (rate(http_server_duration_milliseconds_count{http_status_code=~"5.."}[1m])) or vector(0)
+              # instant, not range: the reduce/threshold steps need a number, not a time series
+              instant: true
+              range: false
+              refId: A
+          # B: reduce the series to a single number.
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: []
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: []
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          # C: the condition — fire when that number is greater than zero.
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              expression: B
+              refId: C
+              type: threshold
