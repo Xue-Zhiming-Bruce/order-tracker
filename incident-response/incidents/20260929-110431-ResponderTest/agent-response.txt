@@ -1,0 +1,35 @@
+## Report — `ResponderTest` (2026-09-29 11:04:31 UTC)
+
+**Verdict: false positive. No code changed, no commit.**
+
+### 1. What the alert and evidence say
+
+- `alert.json`: `alertname=ResponderTest`, `labels.test=true`, summary **"Test notification; no incident to fix"**. It contains no real endpoint/time window/details.
+- `evidence.json` lookback window: **2026-09-29 10:49:39 → 11:04:31 UTC** (900 s before the alert).
+- Metrics: `200` on `/healthz`, and **`404` on `/api/orders/{order_id}`**.
+- Loki: six `WARN "order lookup not found"` lines, all `order_id=standard-1002`, route `/api/orders/{order_id}`, status `404`, `code_file_path=/app/app/main.py:110`.
+- Prometheus `errors` series is **empty** — no 5xx at all.
+
+### 2. Reproduction (exact command)
+
+```bash
+curl -s -w "\nHTTP %{http_code}\n" http://localhost:8000/api/orders/standard-1002
+# {"detail":"Order not found"}
+# HTTP 404
+```
+
+Confirmed: the seeded orders are `standard-1001`, `standard-1003`, `express-1002`. **`standard-1002` does not exist**, so `get_order` correctly returns 404 (`main.py:104-110`). The evidence shows expected behaviour, not a fault.
+
+### 3. Why no fix
+
+- The alert is explicitly a test notification (`test=true`, "no incident to fix") — the Grafana→responder webhook smoke test.
+- The only signal in the evidence is a 404 for a genuinely missing order; a 404 for an unknown ID is the correct response, not a bug.
+- Per the task, unrelated issues are not touched, so the working tree is unchanged except for the harness's own `incident-response/` inputs.
+
+### Verification
+
+`git status --porcelain` → only `?? incident-response/` (harness input, not my edit); `git diff` empty. `uv run --frozen pytest -q` → `3 passed`.
+
+### Out-of-scope observation (reported, not fixed)
+
+While replaying requests I noticed a real, *unrelated* latent bug: `GET /api/orders/express-1002` returns **500**, because `order_detail` does `placed_at.replace(day=placed_at.day + 2)` and `express-1002` was seeded on the last day of a month (`2026-08-31` → `day=33` → `ValueError`). It is not what this alert is about and does not appear in the evidence, so I left it alone — flagging it for a separate ticket.
