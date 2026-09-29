@@ -8,6 +8,16 @@ services:
       - "127.0.0.1:${ORDER_TRACKER_PORT:-8000}:8000"
     environment:
       ORDER_DB_PATH: /data/orders.db
+      OTEL_SERVICE_NAME: order-tracker
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=local
+      # Question 2: print metrics/logs/traces to stdout so `docker compose logs app` shows them.
+      # Question 3 replaces these three with otlp -> the collector.
+      OTEL_METRICS_EXPORTER: console
+      OTEL_TRACES_EXPORTER: console
+      OTEL_LOGS_EXPORTER: console
+      OTEL_METRIC_EXPORT_INTERVAL: "5000"
+      # Turn the Python `logging` calls into OTel log records (off by default: it hooks the root logger).
+      OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED: "true"
     volumes:
       - orders:/data
     restart: unless-stopped

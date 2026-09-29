@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -12,6 +13,9 @@ from pydantic import BaseModel, Field
 
 DB_PATH = Path(os.getenv("ORDER_DB_PATH", "data/orders.db"))
 STATUSES = {"received", "preparing", "shipped", "delivered"}
+
+logger = logging.getLogger("order_tracker")
+logger.setLevel(logging.INFO)  # root defaults to WARNING, so INFO lookups would be dropped before OTel sees them
 
 
 def connect():
@@ -103,7 +107,15 @@ def get_order(order_id: str):
     with connect() as db:
         row = db.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
     if row is None:
+        logger.warning(
+            "order lookup not found",
+            extra={"order.id": order_id, "http.route": "/api/orders/{order_id}", "http.response.status_code": 404},
+        )
         raise HTTPException(404, "Order not found")
+    logger.info(
+        "order lookup",
+        extra={"order.id": order_id, "http.route": "/api/orders/{order_id}", "http.response.status_code": 200},
+    )
     return order_detail(row)
 
 
